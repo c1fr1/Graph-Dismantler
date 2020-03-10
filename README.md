@@ -7,9 +7,7 @@ This name is bad.
 install the following
 
  - glfw
- - opengl
  - glad
- - xorg dev
  - cglm
 
 `make` will compile the program with debug symbols to out/main.

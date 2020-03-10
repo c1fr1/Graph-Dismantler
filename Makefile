@@ -1,31 +1,31 @@
-LIBS=-lm -ldl -lglfw -lGL -lXrandr -lX11 -lXext -lglad
+LIBS=-lm -lglfw -lglad
 DFLAGS=-DDGL_DEBUG -g
 OBJS=out/shader.o out/dgl.o out/texture.o out/vao.o out/dglKeyboardStates.o
 
-out/main: src/main.c $(OBJS)
+out/main: out src/main.c $(OBJS)
 	gcc $(DFLAGS) $(OBJS) src/main.c -o $@ $(LIBS)
 
-out/shader.o: src/shader.c src/shader.h out/
+out/shader.o: src/shader.c src/shader.h
 	gcc $(DFLAGS) -c src/shader.c -o $@
 
-out/dgl.o: src/dgl.c src/dgl.h out/
+out/dgl.o: src/dgl.c src/dgl.h
 	gcc $(DFLAGS) -c src/dgl.c -o $@
 
-out/texture.o: src/texture.c src/texture.h out/
+out/texture.o: src/texture.c src/texture.h
 	gcc $(DFLAGS) -c src/texture.c -o $@
 
-out/vao.o: src/vao.c src/vao.h out/
+out/vao.o: src/vao.c src/vao.h
 	gcc $(DFLAGS) -c src/vao.c -o $@
 
-out/dglKeyboardStates.o: src/dglKeyboardStates.c src/dglKeyboardStates.h out/
+out/dglKeyboardStates.o: src/dglKeyboardStates.c src/dglKeyboardStates.h
 	gcc $(DFLAGS) -c src/dglKeyboardStates.c -o $@
 
-out/:
-	mkdir out
+.PHONY: run clean release out
 
-.PHONY: run clean release
+out:
+	mkdir -p out
 
-release: out/
+release: out
 	gcc -c src/shader.c -o out/shader.o
 	gcc -c src/dgl.c -o out/dgl.o
 	gcc -c src/texture.c -o out/texture.o
