@@ -1,0 +1,13 @@
+#version 330 core
+
+uniform mat4 transformation;
+
+layout (location = 0) in vec3 vertices;
+layout (location = 1) in vec2 texCoordIn;
+
+out vec2 texCoordOut;
+
+void main() {
+	gl_Position = transformation * vec4(vertices, 1);
+	texCoordOut = texCoordIn;
+}

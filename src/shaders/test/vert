@@ -1,0 +1,13 @@
+#version 330 core
+
+uniform mat4 transforms[44];
+uniform vec3 colors[44];
+
+layout (location = 0) in vec3 vertices;
+
+out vec3 instColor;
+
+void main() {
+	gl_Position = transforms[gl_InstanceID] * vec4(vertices, 1);
+	instColor = colors[gl_InstanceID];
+}
