@@ -5,6 +5,8 @@
 #include <time.h>
 #include <unistd.h>
 
+#include <poll.h>
+
 #include <cglm/cglm.h>
 
 #include "shader.h"
@@ -36,8 +38,8 @@ typedef struct {
 	char sideLaneStates;
 	// 0-1 = towers alive mid
 	// 2   = left tower alive
-	// 3   = mid tower alive
-	// 4   = right tower alive
+	// 3   = right tower alive
+	// 4   = mid tower alive
 	char mainState;
 	// 0-2 = distance from ancient
 	// 3-5 = direction enum
@@ -47,6 +49,9 @@ typedef struct {
 
 typedef struct {
 	PlayerState players[4];
+	int playersTurn;
+	char scores[4];
+	int userIndex;
 	GLuint playerTextures[4];
 } BoardState;
 
@@ -197,7 +202,86 @@ void setNodeColors(vec3* nodes) {
 	}
 }
 
+void initConnection(int* sockp, int* sessionp) {
+	*sessionp = initSocket();
+	*sockp = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
+	if (socket < 0) {
+		fprintf(stderr, "error: failed to create socket\n");
+		exit(-1);
+	}
+	struct sockaddr_in sad = {
+		AF_INET,
+		htons(4730),
+		inet_addr("209.180.172.173")
+	};
+	int connection = connect(*sockp, (struct sockaddr*) &sad, sizeof(sad));
+	if (connection < 0) {
+		fprintf(stderr, "error: failed to connect\n");
+	}
+}
+
+void handleConnection(BoardState* board, int fd) {
+	struct pollfd pollfd[1];
+	pollfd[0].fd = fd;
+	pollfd[0].events = POLLIN | POLLHUP; 
+	poll(pollfd, 1, 200);
+	if (pollfd[0].revents & POLLIN) {
+		static char buffer[65535];//max tcp packet size
+		int bytesRead = read(fd, buffer, 65535);
+
+		char* data = buffer;
+		while (bytesRead > 0) {
+			char packetType = buffer[0];
+			if (packetType == 0) {
+				//new connection
+			} else if (packetType == 1) {
+				//new disconnection
+			} else if (packetType == 2) {
+				//update board
+			}
+		}
+	} else if (pollfd[0].revents & POLLHUP) {
+		fprintf("error: lost connection to server\n");
+		exit(-1);
+	}
+}
+
 int main(int argc, char** argv) {
+	//load pfp
+	int pfpWidth, pfpHeight, pfpChannels;
+	unsigned char* pfpData = stbi_load("res/pfp.png", &pfpWidth, &pfpHeight, &pfpChannels, 0);
+
+	//setup game and connect
+	BoardState* board = makeBoard();
+	int fd, socket;
+	initConnection(&fd, &socket);
+
+	{
+		char* packet = malloc(4 + pfpWidth * pfpHeight * 3);
+		packet[0] = pfpWidth << 8;
+		packet[1] = pfpWidth & 0xFF;
+		packet[2] = pfpHeight << 8;
+		packet[3] = pfpHeight & 0xFF;
+		memcpy(packet + 4, pfpData, pfpWidth * pfpHeight * 3);
+		send(fd, packet, 4 + pfpWidth * pfpHeight * 3, 0);
+		free(packet);
+	}
+	stbi_free(pfpData);
+
+	{
+		char buffer[22];
+		read(fd, buffer, 22);
+		for (int i = 0; i < 4; ++i) {
+			board->players[i].sideLaneStates = buffer[4 * i];
+			board->players[i].mainState = buffer[4 * i + 1];
+			board->players[i].attacks[0] = buffer[4 * i + 2];
+			board->players[i].attacks[3] = buffer[4 * i + 3];
+		}
+		board->playersTurn = buffer[16];
+		memcpy(board->scores, buffer + 17, 4);
+		board->userIndex = buffer[21];
+	}
+
 	//create window
 	DGLContext* context = dglCreateContext();
 	DGLWindow* window = dglCreateWindow(context, 800, 800, "DGL test");
@@ -218,14 +302,18 @@ int main(int argc, char** argv) {
 	dglPrintErrors();
 	
 	//set up matrices
-	mat4 pfpMat = GLM_MAT4_IDENTITY_INIT;
-	glm_translate_x(pfpMat, -1.0);
-	glm_translate_y(pfpMat, 1.0);
-	glm_scale_uni(pfpMat, 0.1);
-
+	mat4 pfpMats[4];
 	mat4 nodePositions[44];
-	setNodePositions(nodePositions);
 	vec3 nodeColors[44];
+	
+
+	for (int i = 0; i < 4; ++i) {
+		vec3 pos = {-1.0, 1.0 - 0.2 * (float) i};
+		glm_translate_make(pfpMats[i], pos);
+		glm_scale_uni(pfpMat, 0.1);
+	}
+
+	setNodePositions(nodePositions);
 	setNodeColors(nodeColors);
 
 	//find uniform positions
@@ -252,7 +340,7 @@ int main(int argc, char** argv) {
 		
 		//render nodes
 		glUseProgram(nodeShader);
-		glUniformMatrix4fv(nodeTransformPos, 44, GL_FALSE, (GLfloat*)nodePositions);
+		glUniformMatrix4fv(nodeTransformPos, 44, GL_FALSE, (GLfloat*) nodePositions);
 		glUniform3fv(nodeColorPos, 44, (GLfloat*) nodeColors);
 		glBindVertexArray(nodeVAO);
 		glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0, 44);
@@ -271,6 +359,9 @@ int main(int argc, char** argv) {
 
 	glfwTerminate();
 	
+	closeSocket(fp);
+	quitSocket(socket);
+
 	return 0;
 }
 

@@ -9,6 +9,8 @@ GLuint makeTexture(const char* path) {
 
 	GLuint ret = makeTextureFromData(imageData, width, height);
 
+	imageData[width * height * 3] = 1;
+
 	stbi_image_free(imageData);
 	return ret;
 }
