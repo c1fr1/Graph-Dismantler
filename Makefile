@@ -1,6 +1,6 @@
 LIBS=-lm -lglfw -lglad
 DFLAGS=-DDGL_DEBUG -g
-OBJS=out/shader.o out/dgl.o out/texture.o out/vao.o out/dglKeyboardStates.o
+OBJS=out/shader.o out/dgl.o out/texture.o out/vao.o out/dglKeyboardStates.o out/socket.o
 
 out/main: out src/main.c $(OBJS)
 	gcc $(DFLAGS) $(OBJS) src/main.c -o $@ $(LIBS)
@@ -19,6 +19,9 @@ out/vao.o: src/vao.c src/vao.h
 
 out/dglKeyboardStates.o: src/dglKeyboardStates.c src/dglKeyboardStates.h
 	gcc $(DFLAGS) -c src/dglKeyboardStates.c -o $@
+
+out/socket.o: src/socket.c src/socket.h
+	gcc $(DFLAGS) -c src/socket.c -o $@
 
 .PHONY: run clean release out
 

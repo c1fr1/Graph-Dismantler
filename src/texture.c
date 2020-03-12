@@ -3,6 +3,15 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
+unsigned char* loadTextureData(const char* path, int* width, int* height) {
+	int channels;
+	return stbi_load(path, width, height, &channels, 0);
+}
+
+void freeTextureData(unsigned char* imageData) {
+	stbi_image_free(imageData);
+}
+
 GLuint makeTexture(const char* path) {
 	int width, height, channels;
 	unsigned char* imageData = stbi_load(path, &width, &height, &channels, 0);

@@ -9,6 +9,8 @@
 
 #include <cglm/cglm.h>
 
+#include "socket.h"
+
 #include "shader.h"
 #include "texture.h"
 #include "vao.h"
@@ -31,6 +33,9 @@
 #define ATTACK_DIRECTION_MM 2
 #define ATTACK_DIRECTION_MR 3
 #define ATTACK_DIRECTION_RR 4
+
+#define MAX_PACKET_SIZE 65535
+//65535
 
 typedef struct {
 	// 0-1 = towers alive left
@@ -206,17 +211,26 @@ void initConnection(int* sockp, int* sessionp) {
 	*sessionp = initSocket();
 	*sockp = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if (socket < 0) {
-		fprintf(stderr, "error: failed to create socket\n");
+		fprintf(stderr, "error: failed to create socket (%d)\n", socket);
 		exit(-1);
 	}
 	struct sockaddr_in sad = {
 		AF_INET,
-		htons(4730),
+		htons(4731),
 		inet_addr("209.180.172.173")
 	};
 	int connection = connect(*sockp, (struct sockaddr*) &sad, sizeof(sad));
 	if (connection < 0) {
 		fprintf(stderr, "error: failed to connect\n");
+		exit(-1);
+	}
+}
+
+void readAllBytes(int fd, unsigned char* buffer, int bytesToRead) {
+	while (bytesToRead > 0) {
+		int bytesRead = read(fd, buffer, bytesToRead);
+		buffer += bytesRead;
+		bytesToRead -= bytesRead;
 	}
 }
 
@@ -224,24 +238,66 @@ void handleConnection(BoardState* board, int fd) {
 	struct pollfd pollfd[1];
 	pollfd[0].fd = fd;
 	pollfd[0].events = POLLIN | POLLHUP; 
-	poll(pollfd, 1, 200);
+	poll(pollfd, 1, 2);
 	if (pollfd[0].revents & POLLIN) {
-		static char buffer[65535];//max tcp packet size
-		int bytesRead = read(fd, buffer, 65535);
+		static unsigned char buffer[MAX_PACKET_SIZE];
+		int bytesRead = read(fd, buffer, MAX_PACKET_SIZE);
 
-		char* data = buffer;
+		unsigned char* data = buffer;
 		while (bytesRead > 0) {
-			char packetType = buffer[0];
+			char packetType = data[0];
 			if (packetType == 0) {
 				//new connection
+
+				int pfpPlayer = data[1];
+				int pfpWidth = data[2] >> 8;
+				pfpWidth += data[3];
+				int pfpHeight = data[4] >> 8;
+				pfpHeight += data[5];
+				printf("debug: new connection at index %d, pfp is %dx%d\n", pfpPlayer, pfpWidth, pfpHeight);
+				int pfpSize = pfpWidth * pfpHeight * 3;
+				unsigned char* newPfpData = malloc(pfpSize);
+
+				if (pfpSize + 6 <= bytesRead) {
+					memcpy(newPfpData, data + 6, pfpSize - 6);
+					printf("debug: full pfp sent (%d bytes)\n", bytesRead);
+					data += pfpSize;
+					bytesRead -= pfpSize;
+				} else {
+					memcpy(newPfpData, data + 6, bytesRead - 6);
+					readAllBytes(fd, newPfpData + bytesRead - 6, pfpSize - bytesRead + 6);
+					bytesRead = 0;
+				}
+				board->playerTextures[pfpPlayer] = makeTextureFromData(newPfpData, pfpWidth, pfpHeight);
+				free(newPfpData);
 			} else if (packetType == 1) {
 				//new disconnection
+				glDeleteTextures(1, board->playerTextures + data[1]);
+				board->playerTextures[data[1]] = 0;
+				data += 2;
+				bytesRead -= 2;
 			} else if (packetType == 2) {
 				//update board
+				for (int i = 0;i < 4; ++i) {
+					board->players[i].sideLaneStates = data[4 * i + 1];
+					board->players[i].mainState = data[4 * i + 2];
+					board->players[i].attacks[0] = data[4 * i + 3];
+					board->players[i].attacks[1] = data[4 * i + 4];
+				}
+				board->playersTurn = data[17];
+				memcpy(board->scores, data + 18, 4);
+				board->userIndex = data[22];
+				bytesRead -= 23;
+				data += 23;
+			} else {
+				fprintf(stderr, "error: invalid packet from server\n");
+				//data[bytesRead] = 0;
+				//printf("packet: [%s]\n", data);
+				bytesRead = 0;
 			}
 		}
 	} else if (pollfd[0].revents & POLLHUP) {
-		fprintf("error: lost connection to server\n");
+		fprintf(stderr, "error: lost connection to server\n");
 		exit(-1);
 	}
 }
@@ -249,7 +305,7 @@ void handleConnection(BoardState* board, int fd) {
 int main(int argc, char** argv) {
 	//load pfp
 	int pfpWidth, pfpHeight, pfpChannels;
-	unsigned char* pfpData = stbi_load("res/pfp.png", &pfpWidth, &pfpHeight, &pfpChannels, 0);
+	unsigned char* pfpData = loadTextureData("res/pfp.png", &pfpWidth, &pfpHeight);
 
 	//setup game and connect
 	BoardState* board = makeBoard();
@@ -266,7 +322,7 @@ int main(int argc, char** argv) {
 		send(fd, packet, 4 + pfpWidth * pfpHeight * 3, 0);
 		free(packet);
 	}
-	stbi_free(pfpData);
+	freeTextureData(pfpData);
 
 	{
 		char buffer[22];
@@ -275,7 +331,7 @@ int main(int argc, char** argv) {
 			board->players[i].sideLaneStates = buffer[4 * i];
 			board->players[i].mainState = buffer[4 * i + 1];
 			board->players[i].attacks[0] = buffer[4 * i + 2];
-			board->players[i].attacks[3] = buffer[4 * i + 3];
+			board->players[i].attacks[1] = buffer[4 * i + 3];
 		}
 		board->playersTurn = buffer[16];
 		memcpy(board->scores, buffer + 17, 4);
@@ -297,8 +353,6 @@ int main(int argc, char** argv) {
 	GLuint graphLinesVAO = makeGraphLinesVAO();
 	GLuint nodeVAO = makeNodeVAO();
 
-	GLuint tex = makeTexture("res/pfp.png");
-
 	dglPrintErrors();
 	
 	//set up matrices
@@ -306,11 +360,10 @@ int main(int argc, char** argv) {
 	mat4 nodePositions[44];
 	vec3 nodeColors[44];
 	
-
 	for (int i = 0; i < 4; ++i) {
-		vec3 pos = {-1.0, 1.0 - 0.2 * (float) i};
+		vec3 pos = {-1.0, 1.0 - 0.3 * (float) i};
 		glm_translate_make(pfpMats[i], pos);
-		glm_scale_uni(pfpMat, 0.1);
+		glm_scale_uni(pfpMats[i], 0.3);
 	}
 
 	setNodePositions(nodePositions);
@@ -327,10 +380,19 @@ int main(int argc, char** argv) {
 	
 		//render pfp
 		glUseProgram(textureShader);
-		glUniformMatrix4fv(pfpMatPos, 1, GL_FALSE, (GLfloat*)pfpMat);
+		/*glUniformMatrix4fv(pfpMatPos, 1, GL_FALSE, (GLfloat*) pfpMats);
 		bindTextureToPosition(tex, 0);
 		glBindVertexArray(pfpVAO);
-		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);*/
+		
+		glBindVertexArray(pfpVAO);
+		for (int i = 0; i < 4; ++i) {
+			if (board->playerTextures[i]) {
+				glUniformMatrix4fv(pfpMatPos, 1, GL_FALSE, (GLfloat*) pfpMats[i]);
+				bindTextureToPosition(board->playerTextures[i], 0);
+				glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+			}
+		}
 
 		//render graph
 		glUseProgram(colorShader);
@@ -347,7 +409,7 @@ int main(int argc, char** argv) {
 
 		glfwSwapBuffers(window);
 		dglPrintErrors();
-		sleep(1);
+		handleConnection(board, fd);
 		dglUpdateKeys();
 		glfwPollEvents();
 		if (dglGetKeyCodeState(GLFW_KEY_ESCAPE) == 1) {
@@ -359,7 +421,7 @@ int main(int argc, char** argv) {
 
 	glfwTerminate();
 	
-	closeSocket(fp);
+	closeSocket(fd);
 	quitSocket(socket);
 
 	return 0;
