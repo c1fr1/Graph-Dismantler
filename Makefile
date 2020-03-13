@@ -1,4 +1,4 @@
-LIBS=-lm -lglfw -lglad
+LIBS=-lglfw -lrt -lm -ldl -lX11 -lpthread -lxcb -lXau -lXdmcp -lglad
 DFLAGS=-DDGL_DEBUG -g
 OBJS=out/shader.o out/dgl.o out/texture.o out/vao.o out/dglKeyboardStates.o out/socket.o
 
@@ -40,4 +40,4 @@ run: out/main
 	out/main
 
 clean: 
-	rm out/ -r
+	rm out/ -r 

@@ -240,23 +240,23 @@ void handleConnection(BoardState* board, int fd) {
 	pollfd[0].events = POLLIN | POLLHUP; 
 	poll(pollfd, 1, 2);
 	if (pollfd[0].revents & POLLIN) {
-		static unsigned char buffer[MAX_PACKET_SIZE];
+		static byte buffer[MAX_PACKET_SIZE];
 		int bytesRead = read(fd, buffer, MAX_PACKET_SIZE);
 
-		unsigned char* data = buffer;
+		byte* data = buffer;
 		while (bytesRead > 0) {
-			char packetType = data[0];
+			byte packetType = data[0];
 			if (packetType == 0) {
 				//new connection
 
 				int pfpPlayer = data[1];
-				int pfpWidth = data[2] >> 8;
+				int pfpWidth = data[2] << 8;
 				pfpWidth += data[3];
-				int pfpHeight = data[4] >> 8;
+				int pfpHeight = data[4] << 8;
 				pfpHeight += data[5];
 				printf("debug: new connection at index %d, pfp is %dx%d\n", pfpPlayer, pfpWidth, pfpHeight);
 				int pfpSize = pfpWidth * pfpHeight * 3;
-				unsigned char* newPfpData = malloc(pfpSize);
+				byte* newPfpData = malloc(pfpSize);
 
 				if (pfpSize + 6 <= bytesRead) {
 					memcpy(newPfpData, data + 6, pfpSize - 6);
@@ -305,7 +305,8 @@ void handleConnection(BoardState* board, int fd) {
 int main(int argc, char** argv) {
 	//load pfp
 	int pfpWidth, pfpHeight, pfpChannels;
-	unsigned char* pfpData = loadTextureData("res/pfp.png", &pfpWidth, &pfpHeight);
+	byte* pfpData = loadTextureData("res/pfp.png", &pfpWidth, &pfpHeight);
+	printf("debug: loaded texture, %dx%dpx\n", pfpWidth, pfpHeight, pfpChannels);
 
 	//setup game and connect
 	BoardState* board = makeBoard();
@@ -313,19 +314,22 @@ int main(int argc, char** argv) {
 	initConnection(&fd, &socket);
 
 	{
-		char* packet = malloc(4 + pfpWidth * pfpHeight * 3);
-		packet[0] = pfpWidth << 8;
+		int pfpSize = pfpWidth * pfpHeight * 3;
+		byte* packet = malloc(4 + pfpSize);
+		packet[0] = pfpWidth >> 8;
 		packet[1] = pfpWidth & 0xFF;
-		packet[2] = pfpHeight << 8;
+		packet[2] = pfpHeight >> 8;
 		packet[3] = pfpHeight & 0xFF;
-		memcpy(packet + 4, pfpData, pfpWidth * pfpHeight * 3);
-		send(fd, packet, 4 + pfpWidth * pfpHeight * 3, 0);
+		memcpy(packet + 4, pfpData, pfpSize);
+		printf("debug: packet size = %d\n", 4 + pfpSize);
+		//sendSegmented(fd, packet, 4 + pfpSize, 200);
+		send(fd, packet, 4 + pfpSize, 0);
 		free(packet);
 	}
 	freeTextureData(pfpData);
 
 	{
-		char buffer[22];
+		byte buffer[22];
 		read(fd, buffer, 22);
 		for (int i = 0; i < 4; ++i) {
 			board->players[i].sideLaneStates = buffer[4 * i];

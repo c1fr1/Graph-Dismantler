@@ -1,5 +1,7 @@
 #pragma once
 
+typedef unsigned char byte;
+
 #ifdef _WIN32
 	#ifdef _WIN32_WINNT
 		#define _WIN32_WINNT 0x0501
