@@ -254,12 +254,15 @@ void handleConnection(BoardState* board, int fd) {
 				pfpWidth += data[3];
 				int pfpHeight = data[4] << 8;
 				pfpHeight += data[5];
+				
+				printf("%x%xx%x%x\n", data[2], data[3], data[4], data[5]);
+
 				printf("debug: new connection at index %d, pfp is %dx%d\n", pfpPlayer, pfpWidth, pfpHeight);
 				int pfpSize = pfpWidth * pfpHeight * 3;
 				byte* newPfpData = malloc(pfpSize);
 
 				if (pfpSize + 6 <= bytesRead) {
-					memcpy(newPfpData, data + 6, pfpSize - 6);
+					memcpy(newPfpData, data + 6, pfpSize - 6);//invalid read
 					printf("debug: full pfp sent (%d bytes)\n", bytesRead);
 					data += pfpSize;
 					bytesRead -= pfpSize;
