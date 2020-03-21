@@ -11,3 +11,7 @@ void main() {
 	gl_Position = transforms[gl_InstanceID] * vec4(vertices, 1);
 	instColor = colors[gl_InstanceID];
 }
+
+
+
+//gl_InstanceID;

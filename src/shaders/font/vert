@@ -1,0 +1,24 @@
+#version 330 core
+
+uniform mat4 transforms[204];
+uniform vec4 fontLocs[204];
+
+//this is the max amount of characters that can be drawn
+//some serious work could be done to optimise on fontLocs. it could simply
+//specify a character, while a third uniform holds the details for each
+//character.
+
+//for now at least the vec4 represents
+//(x_0, y_0, width, height)
+
+layout (location = 0) in vec3 vertices;
+layout (location = 1) in vec2 texCoordIn;
+
+out vec2 texCoordOut;
+
+void main() {
+	gl_Position = transforms[gl_InstanceID] * vec4(vertices, 1);
+	texCoordOut.x = fontLocs[gl_InstanceID].x + texCoordIn.x * fontLocs[gl_InstanceID].z;
+	texCoordOut.y = fontLocs[gl_InstanceID].y + texCoordIn.y * fontLocs[gl_InstanceID].w;
+}
+//gl_InstanceID;

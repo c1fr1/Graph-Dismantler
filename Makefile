@@ -1,6 +1,6 @@
 LIBS=-lglfw -lrt -lm -ldl -lX11 -lpthread -lxcb -lXau -lXdmcp -lglad
 DFLAGS=-DDGL_DEBUG -g
-OBJS=out/shader.o out/dgl.o out/texture.o out/vao.o out/dglKeyboardStates.o out/socket.o
+OBJS=out/shader.o out/dgl.o out/texture.o out/vao.o out/dglKeyboardStates.o out/socket.o out/fontRenderer.o
 
 out/main: out src/main.c $(OBJS)
 	gcc $(DFLAGS) $(OBJS) src/main.c -o $@ $(LIBS)
@@ -23,6 +23,9 @@ out/dglKeyboardStates.o: src/dglKeyboardStates.c src/dglKeyboardStates.h
 out/socket.o: src/socket.c src/socket.h
 	gcc $(DFLAGS) -c src/socket.c -o $@
 
+out/fontRenderer.o: src/fontRenderer.c src/fontRenderer.h
+	gcc $(DFLAGS) -c src/fontRenderer.c -o $@
+
 .PHONY: run clean release out
 
 out:
@@ -37,7 +40,7 @@ release: out
 	gcc $(OBJS) src/main.c -o out/main $(LIBS)
 
 run: out/main
-	out/main
+	out/main integrator
 
 clean: 
 	rm out/ -r 

@@ -15,6 +15,8 @@
 #include "texture.h"
 #include "vao.h"
 
+#include "fontRenderer.h"
+
 #define TOWERS_ALIVE_L(a) (a & 3)
 #define TOWERS_ALIVE_M(a) (a & 3)
 #define TOWERS_ALIVE_R(a) ((a << 2) & 3)
@@ -57,13 +59,14 @@ typedef struct {
 	int playersTurn;
 	char scores[4];
 	int userIndex;
-	GLuint playerTextures[4];
+	char* playerNames[4];
+	int playerNameLens[4];
 } BoardState;
 
 BoardState* makeBoard() {
 	BoardState* ret = malloc(sizeof(BoardState));
 	for (int i = 0; i < 4; ++i) {
-		ret->playerTextures[i] = 0;
+		ret->playerNames[0];
 		ret->players[i].sideLaneStates = 0xFF;
 		ret->players[i].mainState = 0xFF;
 		ret->players[i].attacks[0] = 0;
@@ -226,14 +229,6 @@ void initConnection(int* sockp, int* sessionp) {
 	}
 }
 
-void readAllBytes(int fd, unsigned char* buffer, int bytesToRead) {
-	while (bytesToRead > 0) {
-		int bytesRead = read(fd, buffer, bytesToRead);
-		buffer += bytesRead;
-		bytesToRead -= bytesRead;
-	}
-}
-
 void handleConnection(BoardState* board, int fd) {
 	struct pollfd pollfd[1];
 	pollfd[0].fd = fd;
@@ -249,34 +244,20 @@ void handleConnection(BoardState* board, int fd) {
 			if (packetType == 0) {
 				//new connection
 
-				int pfpPlayer = data[1];
-				int pfpWidth = data[2] << 8;
-				pfpWidth += data[3];
-				int pfpHeight = data[4] << 8;
-				pfpHeight += data[5];
-				
-				printf("%x%xx%x%x\n", data[2], data[3], data[4], data[5]);
-
-				printf("debug: new connection at index %d, pfp is %dx%d\n", pfpPlayer, pfpWidth, pfpHeight);
-				int pfpSize = pfpWidth * pfpHeight * 3;
-				byte* newPfpData = malloc(pfpSize);
-
-				if (pfpSize + 6 <= bytesRead) {
-					memcpy(newPfpData, data + 6, pfpSize - 6);//invalid read
-					printf("debug: full pfp sent (%d bytes)\n", bytesRead);
-					data += pfpSize;
-					bytesRead -= pfpSize;
-				} else {
-					memcpy(newPfpData, data + 6, bytesRead - 6);
-					readAllBytes(fd, newPfpData + bytesRead - 6, pfpSize - bytesRead + 6);
-					bytesRead = 0;
-				}
-				board->playerTextures[pfpPlayer] = makeTextureFromData(newPfpData, pfpWidth, pfpHeight);
-				free(newPfpData);
+				int index = data[1];
+				int nameLen = data[2];
+				char* name = malloc(nameLen + 1);
+				memcpy(name, data + 3, data[2]);
+				name[nameLen] = 0;
+				printf("debug: new connection at index %d, name is [%s], (len %d)\n", index, name, nameLen);
+				board->playerNames[data[1]] = name;
+				board->playerNameLens[data[1]] = data[2];
+				data += nameLen + 3;
+				bytesRead -= nameLen + 3;
 			} else if (packetType == 1) {
 				//new disconnection
-				glDeleteTextures(1, board->playerTextures + data[1]);
-				board->playerTextures[data[1]] = 0;
+				free(board->playerNames[data[1]]);
+				board->playerNames[data[1]] = 0;
 				data += 2;
 				bytesRead -= 2;
 			} else if (packetType == 2) {
@@ -306,30 +287,22 @@ void handleConnection(BoardState* board, int fd) {
 }
 
 int main(int argc, char** argv) {
-	//load pfp
-	int pfpWidth, pfpHeight, pfpChannels;
-	byte* pfpData = loadTextureData("res/pfp.png", &pfpWidth, &pfpHeight);
-	printf("debug: loaded texture, %dx%dpx\n", pfpWidth, pfpHeight, pfpChannels);
-
 	//setup game and connect
 	BoardState* board = makeBoard();
 	int fd, socket;
 	initConnection(&fd, &socket);
 
-	{
-		int pfpSize = pfpWidth * pfpHeight * 3;
-		byte* packet = malloc(4 + pfpSize);
-		packet[0] = pfpWidth >> 8;
-		packet[1] = pfpWidth & 0xFF;
-		packet[2] = pfpHeight >> 8;
-		packet[3] = pfpHeight & 0xFF;
-		memcpy(packet + 4, pfpData, pfpSize);
-		printf("debug: packet size = %d\n", 4 + pfpSize);
-		//sendSegmented(fd, packet, 4 + pfpSize, 200);
-		send(fd, packet, 4 + pfpSize, 0);
+	if (argc >= 2) {
+		int nameLen = strlen(argv[1]);
+		byte* packet = malloc(1 + nameLen);
+		packet[0] = nameLen;
+		memcpy(packet + 1, argv[1], nameLen);
+		send(fd, packet, 1 + nameLen, 0);
 		free(packet);
+	} else {
+		printf("error: failed to specify a name\n");
+		return -1;
 	}
-	freeTextureData(pfpData);
 
 	{
 		byte buffer[22];
@@ -355,8 +328,9 @@ int main(int argc, char** argv) {
 	GLuint colorShader = createShaderProgram("src/shaders/color/");
 	GLuint textureShader = createShaderProgram("src/shaders/texture/");
 	GLuint nodeShader = createShaderProgram("src/shaders/test/");
+	GLuint textShader = createShaderProgram("src/shaders/font/");
 
-	GLuint pfpVAO = makeRectangleVAO(0.0, -1.0, 1.0, 1.0);
+	GLuint textVAO = makeRectangleVAO(0.0, 0.0, 1.0, 1.0);
 	GLuint graphLinesVAO = makeGraphLinesVAO();
 	GLuint nodeVAO = makeNodeVAO();
 
@@ -376,30 +350,33 @@ int main(int argc, char** argv) {
 	setNodePositions(nodePositions);
 	setNodeColors(nodeColors);
 
+	//setup font
+	Font* hack = &hackFont;
+	int* lookupTable = makeFontLookupTable(hack);
+	mat4* textMats = malloc(256 * sizeof(mat4));
+	vec4* charvecs = malloc(256 * sizeof(vec4));
+
+
 	//find uniform positions
 	GLuint pfpMatPos = glGetUniformLocation(textureShader, "transformation");
 	GLuint colorPos = glGetUniformLocation(colorShader, "inColor");
 	GLuint nodeTransformPos = glGetUniformLocation(nodeShader, "transforms");
 	GLuint nodeColorPos = glGetUniformLocation(nodeShader, "colors");
 
+	GLuint fontMatPos = glGetUniformLocation(textShader, "transforms");
+	GLuint fontLocPos = glGetUniformLocation(textShader, "fontLocs");
+
+
 	while (!glfwWindowShouldClose(window)) {
 		glClear(GL_COLOR_BUFFER_BIT);
-	
-		//render pfp
-		glUseProgram(textureShader);
-		/*glUniformMatrix4fv(pfpMatPos, 1, GL_FALSE, (GLfloat*) pfpMats);
-		bindTextureToPosition(tex, 0);
-		glBindVertexArray(pfpVAO);
-		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);*/
-		
-		glBindVertexArray(pfpVAO);
-		for (int i = 0; i < 4; ++i) {
-			if (board->playerTextures[i]) {
-				glUniformMatrix4fv(pfpMatPos, 1, GL_FALSE, (GLfloat*) pfpMats[i]);
-				bindTextureToPosition(board->playerTextures[i], 0);
-				glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-			}
-		}
+
+		//render names
+		glUseProgram(textShader);
+		setupUniforms(hack, lookupTable, textMats, charvecs, "fuckface", 0, 0, 1);
+		glUniformMatrix4fv(fontMatPos, 8, GL_FALSE, (GLfloat*) textMats);
+		glUniform4fv(fontLocPos, 8, (GLfloat*) charvecs);
+		glBindVertexArray(textVAO);
+		glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0, 8);
 
 		//render graph
 		glUseProgram(colorShader);
