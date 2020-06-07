@@ -225,7 +225,7 @@ void initConnection(int* sockp, int* sessionp) {
 	int connection = connect(*sockp, (struct sockaddr*) &sad, sizeof(sad));
 	if (connection < 0) {
 		fprintf(stderr, "error: failed to connect\n");
-		exit(-1);
+		//exit(-1);
 	}
 }
 
@@ -290,7 +290,7 @@ int main(int argc, char** argv) {
 	//setup game and connect
 	BoardState* board = makeBoard();
 	int fd, socket;
-	initConnection(&fd, &socket);
+	//initConnection(&fd, &socket);
 
 	if (argc >= 2) {
 		int nameLen = strlen(argv[1]);
@@ -304,7 +304,12 @@ int main(int argc, char** argv) {
 		return -1;
 	}
 
-	{
+	board->playerNames[0] = "Slab";
+	board->playerNames[1] = "Claire";
+	board->playerNames[2] = "C1FR1";
+	board->playerNames[3] = "Ebet";
+
+	/*{
 		byte buffer[22];
 		read(fd, buffer, 22);
 		for (int i = 0; i < 4; ++i) {
@@ -316,12 +321,16 @@ int main(int argc, char** argv) {
 		board->playersTurn = buffer[16];
 		memcpy(board->scores, buffer + 17, 4);
 		board->userIndex = buffer[21];
-	}
+	}*/
 
 	//create window
 	DGLContext* context = dglCreateContext();
 	DGLWindow* window = dglCreateWindow(context, 800, 800, "DGL test");
 	printf("debug: OpenGL %d.%d\n", GLVersion.major, GLVersion.minor);
+
+	GLint maxShaderComps;
+	glGetIntegerv(GL_MAX_VERTEX_UNIFORM_COMPONENTS_ARB, &maxShaderComps);
+	printf("debug: Max shader comp %d\n", maxShaderComps);
 	glClearColor(0.1, 0.0, 0.0, 1.0);
 
 	//create openGL objects
@@ -329,6 +338,7 @@ int main(int argc, char** argv) {
 	GLuint textureShader = createShaderProgram("src/shaders/texture/");
 	GLuint nodeShader = createShaderProgram("src/shaders/test/");
 	GLuint textShader = createShaderProgram("src/shaders/font/");
+	GLuint fontTexture = makeTexture("res/font.png");
 
 	GLuint textVAO = makeRectangleVAO(0.0, 0.0, 1.0, 1.0);
 	GLuint graphLinesVAO = makeGraphLinesVAO();
@@ -372,11 +382,17 @@ int main(int argc, char** argv) {
 
 		//render names
 		glUseProgram(textShader);
-		setupUniforms(hack, lookupTable, textMats, charvecs, "fuckface", 0, 0, 1);
-		glUniformMatrix4fv(fontMatPos, 8, GL_FALSE, (GLfloat*) textMats);
-		glUniform4fv(fontLocPos, 8, (GLfloat*) charvecs);
+		bindTextureToPosition(fontTexture, 0);
 		glBindVertexArray(textVAO);
-		glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0, 8);
+		for (int i = 0 ; i < 4; ++i) {
+			if (board->playerNames[i]) {
+				int nameLen = strlen(board->playerNames[i]);
+				setupUniforms(hack, lookupTable, textMats, charvecs, board->playerNames[i], -1 / 0.06, ((float) -(i + 1) / 0.06) + 1 / (0.06 * 0.06), 0.06);
+				glUniformMatrix4fv(fontMatPos, nameLen, GL_FALSE, (GLfloat*) textMats);
+				glUniform4fv(fontLocPos, nameLen, (GLfloat*) charvecs);
+				glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0, nameLen);
+			}
+		}
 
 		//render graph
 		glUseProgram(colorShader);
@@ -393,7 +409,8 @@ int main(int argc, char** argv) {
 
 		glfwSwapBuffers(window);
 		dglPrintErrors();
-		handleConnection(board, fd);
+		//handleConnection(board, fd);
+		sleep(1);
 		dglUpdateKeys();
 		glfwPollEvents();
 		if (dglGetKeyCodeState(GLFW_KEY_ESCAPE) == 1) {

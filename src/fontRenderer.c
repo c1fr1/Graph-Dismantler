@@ -29,29 +29,35 @@ void getCharMat(mat4 targ, Font* f, int* lut, char c, float* x, float y) {
 	Character cObj = f->characters[lut[c]];
 	glm_mat4_identity(targ);
 	vec3 scale;
-	scale[0] = (float) cObj.width;
-	scale[1] = (float) cObj.height;
+	scale[0] = (float) cObj.width / (float) f->size;
+	scale[1] = (float) cObj.height / (float) f->size;
 	scale[2] = 1.0;
 
+	*x += (float) cObj.advance / (float) f->size;
+
 	vec3 translate;
-	translate[0] = *x + (float) cObj.originX;
-	translate[1] = y + (float) cObj.originY;
+	translate[0] = *x + (float) (cObj.originX - cObj.width) / (float) f->size;
+	translate[1] = y + (float) (cObj.originY - cObj.height) / (float) f->size;
 	translate[2] = 0;
 
 	glm_translate(targ, translate);
 	glm_scale(targ, scale);
-	*x += cObj.advance;
 }
 
 void setupUniforms(Font* f, int* lut, mat4* mats, vec4* vecs, char* text, float x, float y, float scale) {
-	int i;
+	int i = 0;
 	vec3 scalev;
 	scalev[0] = scale;
 	scalev[1] = scale;
 	scalev[2] = 1;
+	mat4 scratch;
+
 	while (text[i]) {
-		getCharMat(mats[i], f, lut, text[i], &x, y);
+		glm_mat4_identity(mats[i]);
 		glm_scale(mats[i], scalev);
+		getCharMat(scratch, f, lut, text[i], &x, y * scale);
+		glm_mat4_mul(mats[i], scratch, mats[i]);
+		//glm_scale(mats[i], scalev);
 		getCharPosition(vecs[i], f, lut, text[i]);
 		++i;
 	}

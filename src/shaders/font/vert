@@ -18,6 +18,7 @@ out vec2 texCoordOut;
 
 void main() {
 	gl_Position = transforms[gl_InstanceID] * vec4(vertices, 1);
+	//texCoordOut = texCoordIn;
 	texCoordOut.x = fontLocs[gl_InstanceID].x + texCoordIn.x * fontLocs[gl_InstanceID].z;
 	texCoordOut.y = fontLocs[gl_InstanceID].y + texCoordIn.y * fontLocs[gl_InstanceID].w;
 }
