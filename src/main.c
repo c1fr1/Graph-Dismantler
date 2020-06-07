@@ -290,7 +290,7 @@ int main(int argc, char** argv) {
 	//setup game and connect
 	BoardState* board = makeBoard();
 	int fd, socket;
-	//initConnection(&fd, &socket);
+	initConnection(&fd, &socket);
 
 	if (argc >= 2) {
 		int nameLen = strlen(argv[1]);
@@ -304,12 +304,12 @@ int main(int argc, char** argv) {
 		return -1;
 	}
 
-	board->playerNames[0] = "Slab";
+	/*board->playerNames[0] = "Slab";
 	board->playerNames[1] = "Claire";
 	board->playerNames[2] = "C1FR1";
-	board->playerNames[3] = "Ebet";
+	board->playerNames[3] = "Ebet";*/
 
-	/*{
+	{
 		byte buffer[22];
 		read(fd, buffer, 22);
 		for (int i = 0; i < 4; ++i) {
@@ -321,7 +321,7 @@ int main(int argc, char** argv) {
 		board->playersTurn = buffer[16];
 		memcpy(board->scores, buffer + 17, 4);
 		board->userIndex = buffer[21];
-	}*/
+	}
 
 	//create window
 	DGLContext* context = dglCreateContext();
@@ -409,7 +409,7 @@ int main(int argc, char** argv) {
 
 		glfwSwapBuffers(window);
 		dglPrintErrors();
-		//handleConnection(board, fd);
+		handleConnection(board, fd);
 		sleep(1);
 		dglUpdateKeys();
 		glfwPollEvents();
