@@ -18,4 +18,6 @@ DGLContext* dglCreateContext();
 
 DGLWindow* dglCreateWindow(DGLContext*, int, int, const char*);
 
+void dglGetCursorPosition(DGLWindow*, float* xp, float* yp);
+
 int dglPrintErrors();

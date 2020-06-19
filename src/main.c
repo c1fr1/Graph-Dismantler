@@ -210,6 +210,42 @@ void setNodeColors(vec3* nodes) {
 	}
 }
 
+void updateNodeColors(vec3* nodes, BoardState* board) {
+	for (int i = 0; i < 4; ++i) {
+		for (int j = 0; j < 3; ++j) {
+			if (j >= board->players[i].sideLaneStates & 3) {
+				nodes[i * 11 + j][0] = 0.5;
+				nodes[i * 11 + j][1] = 0.5;
+				nodes[i * 11 + j][2] = 0.5;
+			}
+		}
+		for (int j = 0; j < 3; ++j) {
+			if (j >= board->players[i].sideLaneStates << 2) {
+				nodes[i * 11 + j + 3][0] = 0.5;
+				nodes[i * 11 + j + 3][1] = 0.5;
+				nodes[i * 11 + j + 3][2] = 0.5;
+			}
+		}
+		if (board->players[i].mainState & 3 < 2) {
+			nodes[i * 11 + 6][0] = 0.5;
+			nodes[i * 11 + 6][1] = 0.5;
+			nodes[i * 11 + 6][2] = 0.5;
+		}
+		if (board->players[i].mainState & 3 < 3) {
+			nodes[i * 11 + 7][0] = 0.5;
+			nodes[i * 11 + 7][1] = 0.5;
+			nodes[i * 11 + 7][2] = 0.5;
+		}
+		for (int j = 2; j < 5; ++j) {
+			if (!(board->players[i].mainState & (1 << j))) {
+				nodes[i * 11 + 6 + j][0] = 0.5;
+				nodes[i * 11 + 6 + j][1] = 0.5;
+				nodes[i * 11 + 6 + j][2] = 0.5;
+			}
+		}
+	}
+}
+
 void initConnection(int* sockp, int* sessionp) {
 	*sessionp = initSocket();
 	*sockp = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -273,6 +309,7 @@ void handleConnection(BoardState* board, int fd) {
 				board->userIndex = data[22];
 				bytesRead -= 23;
 				data += 23;
+				printf("debug: board updated\n");
 			} else {
 				fprintf(stderr, "error: invalid packet from server\n");
 				//data[bytesRead] = 0;
@@ -284,6 +321,41 @@ void handleConnection(BoardState* board, int fd) {
 		fprintf(stderr, "error: lost connection to server\n");
 		exit(-1);
 	}
+}
+
+int checkInput(vec3* colors, mat4* positions, int playerIndex, float x, float y) {
+	vec4 cursorPos = {-x, y, 0, 1};
+	glm_vec2_rotate(cursorPos, -M_PI * (float) playerIndex / 2.0, cursorPos);
+	vec4 targ;
+	for (int i = 0; i < 11; ++i) {
+		glm_mat4_mulv(positions[i], cursorPos, targ);
+		float dist = targ[0] * targ[0] + targ[1] * targ[1];
+		if (dist < 0.0008) {
+			return playerIndex * 11 + i;
+		}
+	}
+	return -1;
+}
+
+int getLane(int node) {
+	if (node <= 2) {
+		return 0;
+	} else if (node <= 5) {
+		return 1;
+	} else if (node == 8) {
+		return 2;
+	} else if (node == 9) {
+		return 3;
+	} else {
+		return 4;
+	}
+}
+
+void takeAction(int node, int fd) {
+	byte* packet[2];
+	packet[0] = 0;
+	packet[1] = getLane(node);
+	send(fd, packet, 2, 0);
 }
 
 int main(int argc, char** argv) {
@@ -303,11 +375,6 @@ int main(int argc, char** argv) {
 		printf("error: failed to specify a name\n");
 		return -1;
 	}
-
-	/*board->playerNames[0] = "Slab";
-	board->playerNames[1] = "Claire";
-	board->playerNames[2] = "C1FR1";
-	board->playerNames[3] = "Ebet";*/
 
 	{
 		byte buffer[22];
@@ -401,12 +468,30 @@ int main(int argc, char** argv) {
 		glDrawElements(GL_LINES, 20, GL_UNSIGNED_INT, 0);
 		
 		//render nodes
+		updateNodeColors(nodeColors, board);
 		glUseProgram(nodeShader);
 		glUniformMatrix4fv(nodeTransformPos, 44, GL_FALSE, (GLfloat*) nodePositions);
 		glUniform3fv(nodeColorPos, 44, (GLfloat*) nodeColors);
 		glBindVertexArray(nodeVAO);
 		glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0, 44);
+		
+		//check cursor pos
+		float cursorx, cursory;
+		dglGetCursorPosition(window, &cursorx, &cursory);
+		int sel = checkInput(nodeColors, nodePositions, board->userIndex, cursorx, cursory);
+		if (sel >= 0) {
+			glUniformMatrix4fv(nodeTransformPos, 1, GL_FALSE, (GLfloat*) (nodePositions + sel));
+			vec3 whiteColor[1] = {{1.0, 1.0, 1.0}};
+			glUniform3fv(nodeColorPos, 1, (GLfloat*) whiteColor);
+			glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0, 1);
+			if (dglGetMouseButtonState(GLFW_MOUSE_BUTTON_LEFT) == DGL_KEY_RELEASED) {
+				printf("debug - taking action\n");
+				takeAction(sel, fd);
+			}
+			//printf("debug - LMB is %d\n", dglGetMouseButtonState(GLFW_MOUSE_BUTTON_LEFT));
+		}
 
+		//finish frame
 		glfwSwapBuffers(window);
 		dglPrintErrors();
 		handleConnection(board, fd);

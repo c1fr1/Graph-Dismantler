@@ -12,8 +12,12 @@ void dglPrepareKeys();
 
 void dglKeyCallback(GLFWwindow*, int, int, int, int);
 
+void dglMouseButtonCallback(GLFWwindow*, int, int, int);
+
 int dglGetKeyState(char key);
 
 int dglGetKeyCodeState(int key);
+
+int dglGetMouseButtonState(int button); 
 
 void dglUpdateKeys();

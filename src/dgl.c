@@ -18,7 +18,21 @@ DGLWindow* dglCreateWindow(DGLContext* context, int width, int height, const cha
 	}
 	dglPrepareKeys();
 	glfwSetKeyCallback(window, dglKeyCallback);
+	glfwSetMouseButtonCallback(window, dglMouseButtonCallback);
 	return window;
+}
+
+void dglGetCursorPosition(DGLWindow* window, float* xp, float* yp) {
+	double x, y;
+	int w, h;
+	glfwGetCursorPos(window, &x, &y);
+	glfwGetWindowSize(window, &w, &h);
+	*xp = (float) x / (float) w;
+	*yp = (float) y / (float) h;
+	*xp *= 2;
+	*yp *= 2;
+	*xp -= 1;
+	*yp -= 1;
 }
 
 int dglPrintErrors() {
