@@ -352,7 +352,7 @@ int getLane(int node) {
 }
 
 void takeAction(int node, int fd) {
-	byte* packet[2];
+	char packet[2];
 	packet[0] = 0;
 	packet[1] = getLane(node);
 	send(fd, packet, 2, 0);

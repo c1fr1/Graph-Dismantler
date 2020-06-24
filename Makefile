@@ -40,7 +40,7 @@ release: out
 	gcc $(OBJS) src/main.c -o out/main $(LIBS)
 
 run: out/main
-	out/main integrator
+	out/main test subject
 
 clean: 
 	rm out/ -r 
