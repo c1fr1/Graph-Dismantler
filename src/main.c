@@ -443,6 +443,10 @@ int main(int argc, char** argv) {
 	GLuint fontMatPos = glGetUniformLocation(textShader, "transforms");
 	GLuint fontLocPos = glGetUniformLocation(textShader, "fontLocs");
 
+	//sleep duration
+	struct timespec sleepDuration;
+	sleepDuration.tv_sec = 0;
+	sleepDuration.tv_nsec = 16666667;
 
 	while (!glfwWindowShouldClose(window)) {
 		glClear(GL_COLOR_BUFFER_BIT);
@@ -478,6 +482,7 @@ int main(int argc, char** argv) {
 		//check cursor pos
 		float cursorx, cursory;
 		dglGetCursorPosition(window, &cursorx, &cursory);
+		//printf("debug: cursor pos = (%f, %f)\n", cursorx, cursory);
 		int sel = checkInput(nodeColors, nodePositions, board->userIndex, cursorx, cursory);
 		if (sel >= 0) {
 			glUniformMatrix4fv(nodeTransformPos, 1, GL_FALSE, (GLfloat*) (nodePositions + sel));
@@ -488,14 +493,13 @@ int main(int argc, char** argv) {
 				printf("debug - taking action\n");
 				takeAction(sel, fd);
 			}
-			//printf("debug - LMB is %d\n", dglGetMouseButtonState(GLFW_MOUSE_BUTTON_LEFT));
 		}
 
 		//finish frame
 		glfwSwapBuffers(window);
 		dglPrintErrors();
 		handleConnection(board, fd);
-		sleep(1);
+		nanosleep(&sleepDuration, NULL);
 		dglUpdateKeys();
 		glfwPollEvents();
 		if (dglGetKeyCodeState(GLFW_KEY_ESCAPE) == 1) {
